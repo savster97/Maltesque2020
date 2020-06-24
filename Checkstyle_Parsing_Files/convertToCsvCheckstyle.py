@@ -1,32 +1,55 @@
+"""
+The code in this file converts the XML files from Checkstyle
+into one summary CSV file. The CSV file contains all the
+relevant information from all the project analysis results.
+"""
+
 import pandas as pd
 import os
 import glob
 import xml.etree.cElementTree as et
 import csv
 
-DOMAIN_NAMES = ['com/', 'org/', 'edu/', 'gov/', 'net/', 'nl/']
+DOMAIN_NAMES = ['com/', 'org/', 'edu/', 'gov/', 'net/', 'nl/'] # used for extracting the package
 
-# Checks for existing domain and returns the domain if found
+
 def checkForExistingDomain (fileName):
+    """
+    Returns the domain name in the package if found.
+    Otherwise returns empty string.
+    :param fileName: File path (string)
+    :return: domainFound (string)
+     """
     domainFound = ""
 
     for domain in DOMAIN_NAMES:
+
         if domain in fileName:
-            # splitFileName = fileName.split(domain)
-            # packageName = domain + splitFileName[-1].replace("/", ".")
             domainFound = domain
+
             break
+
     return domainFound
 
 
-# Return the language of the file
 def extractLanguage (fileName):
-    language = fileName.split(".")[-1]
+    """
+    Returns the language the code is written in concerning the violation.
+    :param fileName: File path (string)
+    :return: language (string)
+    """
+    language = str(fileName.split(".")[-1])
 
     return language
 
-# Return the package of the file
+
 def extractPackage (fileName):
+    """
+    Returns the package name where the violation occurs if it exists.
+    Otherwise returns an empty string.
+    :param fileName: File path (string)
+    :return: package (string)
+    """
     packageName = ""
 
     domain = checkForExistingDomain(fileName)
@@ -34,8 +57,6 @@ def extractPackage (fileName):
     if domain != "":
         splitFileName = fileName.split(domain)
         packageName = domain.replace("/", ".") + splitFileName[-1].replace("/", ".")
-        print("Domain found is: " + domain)
-        print("File path is: " + fileName)
 
     elif "src/main/java/" in fileName:
         splitFileName = fileName.split("src/main/java/")
@@ -102,8 +123,14 @@ def extractPackage (fileName):
 
     return packageName
 
-# Returns string of the class name
+
 def extractClass (fileName):
+    """
+    Returns the class name where the violation occurs if it exists.
+    Otherwise returns an empty string.
+    :param fileName: File path (string)
+    :return: className (string)
+    """
     className = ""
 
     if fileName.find("$assert") == -1:
@@ -113,14 +140,43 @@ def extractClass (fileName):
 
     return className
 
-# Returns string of the method name
+
 def extractMethod (name):
-    methodName = ""
+    """
+    Returns the method name where the violation occurs if it exists.
+    Otherwise returns an empty string.
+    :param fileName: File path (string)
+    :return: methodName (string)
+    """
+    methodName = "" # Checkstyle only provides the class name. This is set as empty string for consistency to combine
+                    # with the other tools.
 
     return methodName
 
+
+def extractCategory (source):
+    """
+   Returns the category name where the violation occurs.
+   :param source: source path (string)
+   :return: category (string)
+   """
+    category = source.split(".")[-2]
+
+    return category
+
+
+def extractRule(source):
+    """
+   Returns the rule where the violation occurs.
+   :param source: source path (string)
+   :return: rule (string)
+   """
+    rule = source.split(".")[-1]
+
+    return rule
+
 mainDirectory = "/Users/lujan/Desktop/thesis_work/Maltesque2020_code-smell-prediction/Checkstyle_Raw_Data"
-os.chdir(mainDirectory)
+os.chdir(mainDirectory) # Changing directory to iterate through all the raw data from the analysis
 
 # Creating the output csv file structure
 projectNames = []
@@ -129,11 +185,12 @@ languages = []
 packages = []
 classNames = []
 methods = []
+categories = []
+rules = []
 issues = []
 startLines = []
 endLines = []
 severities = []
-types = []
 
 missingFiles = []
 processedFiles = []
@@ -145,17 +202,22 @@ for file in glob.glob("*.xml"):
     projectName = file.split("_CS")[0]
     tool = "Checkstyle"
 
+    # This is implace to catch any files that were not in
+    # the proper XML format imported from Checkstyle.
     try:
         tree = et.parse(file)
         root = tree.getroot()
+    # In case some files were not in the right XML format. These are reported in the missingFiles.
+    # The code shouldn't enter here preferably (assuming all the XML files are proper).
     except:
         missingFiles.append(str(file))
         processedFiles.remove(str(file))
         pass
 
+    # Iterate through all the violations reported in a class.
     for child in root:
 
-        if child.findall('error'):
+        if child.findall('error'): # Here the violation is named as "error"
             fileName = str(child.attrib['name'])
 
             language = extractLanguage(fileName)
@@ -166,22 +228,26 @@ for file in glob.glob("*.xml"):
             for subChild in child:
 
                 try:
+                    category = extractCategory(subChild.get('source'))
+                    rule = extractRule(subChild.get('source'))
                     issue = str(subChild.get('message'))
                     line = str(subChild.get('line'))
                     severity = str(subChild.get('severity'))
-                    type = str(subChild.get('source'))
-                    type = type.split(".")[-1]
 
+                    # This was added to remove the anomaly case "$assert" which was neither a method or class
                     if ((className == "") and (method == "")) or ((className == "assert") or (method == "assert")):
                         pass
                     else:
 
+                        # Add all the values to the CSV file
                         projectNames.append(projectName)
                         tools.append(tool)
                         languages.append(language)
                         packages.append(package)
                         classNames.append(className)
                         methods.append(method)
+                        categories.append(category)
+                        rules.append(rule)
                         issues.append(issue)
                         startLines.append(line)
                         endLines.append(line)
@@ -192,24 +258,27 @@ for file in glob.glob("*.xml"):
 
 print("before dictionary")
 test = {"projectName": projectNames, "tool": tools, "language": languages, "package": packages, "class": classNames,
-        "method": methods, "issue": issues, "startLine": startLines, "endLine": endLines,"severity": severities, "type": types}
+        "method": methods, "category": categories, "rule": rules, "issue": issues, "startLine": startLines, "endLine": endLines,"severity": severities}
 
+# Making sure there are no problems with the length of the arrays for the file
 print(len(projectNames))
 print(len(tools))
 print(len(languages))
 print(len(packages))
 print(len(classNames))
 print(len(methods))
+print(len(categories))
+print(len(rules))
 print(len(issues))
 print(len(startLines))
 print(len(endLines))
 print(len(severities))
-print(len(types))
 
 print("before dataframe")
 output = pd.DataFrame(test)
 
-output = output[['projectName', 'tool', 'language', 'package', 'class', 'method', 'issue', 'startLine', 'endLine', 'severity', 'type']]
+# To arrange the CSV file to output in the mentioned order. Otherwise the order of the columns is randomly allocated.
+output = output[['projectName', 'tool', 'language', 'package', 'class', 'method', 'category', 'rule', 'issue', 'startLine', 'endLine', 'severity']]
 output.sort_values("class", axis = 0, ascending = True, inplace = True, na_position ='last')
 
 print("changing directory")
@@ -218,25 +287,3 @@ os.chdir("/Users/lujan/Desktop/thesis_work/Maltesque2020_code-smell-prediction/C
 print("creating csv file")
 output.to_csv("monsterFileCheckstyle.csv")
 output.to_csv("monsterFileCheckstyle.csv", quoting=csv.QUOTE_NONNUMERIC, index=False)
-
-classesOkay = True
-methodsOkay = True
-
-for className in classNames:
-
-    if className != "":
-
-        if (className.find("$") != -1) or (className.find(".") != -1) or (className.find("/") != -1):
-            classesOkay = False
-            print("The class with error is: " + className)
-
-for method in methods:
-
-    if method != "":
-
-        if (method.find("$") != -1) or (method.find(".") != -1) or (method.find("/") != -1):
-            methodOkay = False
-            print("The method with error is: " + className)
-
-print("Classes okay?: " + str(classesOkay))
-print("Methods okay?: "+ str(methodsOkay))
