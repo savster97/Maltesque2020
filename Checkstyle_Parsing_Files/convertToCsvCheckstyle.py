@@ -12,6 +12,17 @@ import csv
 
 DOMAIN_NAMES = ['com/', 'org/', 'edu/', 'gov/', 'net/', 'nl/'] # used for extracting the package
 
+def extractProjectName (fileName):
+    """
+    Returns the project name where the error occurs.
+    :param fileName: File path (string)
+    :return: projectName (string)
+     """
+    projectName = fileName.split("/Users/lujan/Desktop/thesis_work/cloned_repos/")[1]
+    projectName = projectName.split("/")[0]
+
+    return projectName
+
 
 def checkForExistingDomain (fileName):
     """
@@ -195,11 +206,12 @@ severities = []
 missingFiles = []
 processedFiles = []
 
+testError = []
+
 for file in glob.glob("*.xml"):
     print(file)
     processedFiles.append(str(file))
 
-    projectName = file.split("_CS")[0]
     tool = "Checkstyle"
 
     # This is implace to catch any files that were not in
@@ -220,9 +232,15 @@ for file in glob.glob("*.xml"):
         if child.findall('error'): # Here the violation is named as "error"
             fileName = str(child.attrib['name'])
 
+            projectName = extractProjectName(fileName)
             language = extractLanguage(fileName)
             package = extractPackage(fileName)
             className = extractClass(fileName)
+
+            if className == "AbstractCompletionTest":
+                if projectName not in testError:
+                    testError.append(projectName)
+
             method = extractMethod(fileName)
 
             for subChild in child:
@@ -287,3 +305,6 @@ os.chdir("/Users/lujan/Desktop/thesis_work/Maltesque2020_code-smell-prediction/C
 print("creating csv file")
 output.to_csv("monsterFileCheckstyle.csv")
 output.to_csv("monsterFileCheckstyle.csv", quoting=csv.QUOTE_NONNUMERIC, index=False)
+
+for project in testError:
+    print(project)
